@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users,
   Pill,
@@ -13,29 +14,62 @@ import {
   Plus,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-
-const stats = [
-  { name: "Active Patients", value: "12", icon: Users, change: "+2 this week", trend: "up" },
-  { name: "Medications Today", value: "8", icon: Pill, change: "3 remaining", trend: "neutral" },
-  { name: "Tasks Complete", value: "85%", icon: CheckCircle, change: "+12% vs last week", trend: "up" },
-  { name: "Upcoming", value: "5", icon: Calendar, change: "Next 24 hours", trend: "neutral" },
-];
-
-const upcomingTasks = [
-  { time: "2:00 PM", patient: "Mrs. Johnson", task: "Medication - Lisinopril 10mg", status: "pending" },
-  { time: "3:30 PM", patient: "Mr. Smith", task: "Physical therapy exercises", status: "pending" },
-  { time: "4:00 PM", patient: "Mrs. Davis", task: "Blood pressure check", status: "pending" },
-  { time: "5:00 PM", patient: "Mr. Wilson", task: "Dinner preparation", status: "pending" },
-];
-
-const recentActivity = [
-  { type: "completed", text: "Morning medication given to Mrs. Johnson", time: "1 hour ago" },
-  { type: "note", text: "Added vitals note for Mr. Smith", time: "2 hours ago" },
-  { type: "alert", text: "Medication refill needed for Mrs. Davis", time: "3 hours ago" },
-  { type: "completed", text: "Completed morning routine checklist", time: "4 hours ago" },
-];
+import { useDashboardOverview } from "@/hooks/useDashboard";
+import { usePatients } from "@/hooks/usePatients";
 
 export default function Dashboard() {
+  const { data: overview, isLoading } = useDashboardOverview();
+  const { data: patients } = usePatients();
+
+  const stats = [
+    { 
+      name: "Active Patients", 
+      value: overview?.activePatientsCount || 0, 
+      icon: Users, 
+      change: patients?.length ? `${patients.length} total` : "No patients yet", 
+      trend: "up" 
+    },
+    { 
+      name: "Tasks Today", 
+      value: overview?.todaySchedule?.length || 0, 
+      icon: Calendar, 
+      change: `${overview?.upcomingTasksCount || 0} upcoming`, 
+      trend: "neutral" 
+    },
+    { 
+      name: "Tasks Complete", 
+      value: `${overview?.tasksCompletionPercent || 0}%`, 
+      icon: CheckCircle, 
+      change: "Today's progress", 
+      trend: (overview?.tasksCompletionPercent || 0) > 50 ? "up" : "neutral" 
+    },
+    { 
+      name: "Upcoming", 
+      value: overview?.upcomingTasksCount || 0, 
+      icon: Clock, 
+      change: "Next 24 hours", 
+      trend: "neutral" 
+    },
+  ];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6 animate-fade-up">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} variant="elevated">
+              <CardContent className="p-6">
+                <Skeleton className="h-12 w-12 rounded-xl mb-4" />
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-4 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-up">
       {/* Stats Grid */}
@@ -78,26 +112,38 @@ export default function Dashboard() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
-            {upcomingTasks.map((task, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-4 p-3 rounded-lg bg-accent/50 hover:bg-accent transition-colors"
-              >
-                <div className="w-10 h-10 rounded-full bg-primary-light flex items-center justify-center flex-shrink-0">
-                  <Clock className="w-5 h-5 text-primary" />
+            {overview?.todaySchedule && overview.todaySchedule.length > 0 ? (
+              overview.todaySchedule.slice(0, 4).map((task: any) => (
+                <div
+                  key={task.id}
+                  className="flex items-center gap-4 p-3 rounded-lg bg-accent/50 hover:bg-accent transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-full bg-primary-light flex items-center justify-center flex-shrink-0">
+                    <Clock className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground text-sm truncate">{task.title}</p>
+                    <p className="text-xs text-muted-foreground">{task.patient}</p>
+                  </div>
+                  <Badge 
+                    variant={task.status === "COMPLETED" ? "success" : "soft"} 
+                    className="flex-shrink-0"
+                  >
+                    {task.time || "All day"}
+                  </Badge>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground text-sm truncate">{task.task}</p>
-                  <p className="text-xs text-muted-foreground">{task.patient}</p>
-                </div>
-                <Badge variant="soft" className="flex-shrink-0">
-                  {task.time}
-                </Badge>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground">No tasks scheduled for today</p>
               </div>
-            ))}
-            <Button variant="outline" className="w-full mt-4">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Task
+            )}
+            <Button variant="outline" className="w-full mt-4" asChild>
+              <Link to="/dashboard/schedule">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Task
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -111,34 +157,37 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {recentActivity.map((activity, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-4 p-3 rounded-lg hover:bg-accent/50 transition-colors"
-              >
+            {overview?.recentActivity && overview.recentActivity.length > 0 ? (
+              overview.recentActivity.map((activity: any) => (
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    activity.type === "completed"
-                      ? "bg-success/10"
-                      : activity.type === "alert"
-                      ? "bg-warning/10"
-                      : "bg-primary-light"
-                  }`}
+                  key={activity.id}
+                  className="flex items-start gap-4 p-3 rounded-lg hover:bg-accent/50 transition-colors"
                 >
-                  {activity.type === "completed" ? (
-                    <CheckCircle className="w-4 h-4 text-success" />
-                  ) : activity.type === "alert" ? (
-                    <AlertCircle className="w-4 h-4 text-warning" />
-                  ) : (
-                    <Clock className="w-4 h-4 text-primary" />
-                  )}
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      activity.type === "TASK_COMPLETED" || activity.type === "MEDICATION_GIVEN"
+                        ? "bg-success/10"
+                        : "bg-primary-light"
+                    }`}
+                  >
+                    {activity.type === "TASK_COMPLETED" || activity.type === "MEDICATION_GIVEN" ? (
+                      <CheckCircle className="w-4 h-4 text-success" />
+                    ) : (
+                      <Clock className="w-4 h-4 text-primary" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-foreground">{activity.text}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{activity.time}</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground">{activity.text}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{activity.time}</p>
-                </div>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground">No recent activity</p>
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
       </div>
@@ -156,17 +205,23 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="default" size="sm">
-                <Plus className="w-4 h-4 mr-1" />
-                Add Patient
+              <Button variant="default" size="sm" asChild>
+                <Link to="/dashboard/patients">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add Patient
+                </Link>
               </Button>
-              <Button variant="outline" size="sm">
-                <Pill className="w-4 h-4 mr-1" />
-                Log Medication
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/dashboard/medications">
+                  <Pill className="w-4 h-4 mr-1" />
+                  Log Medication
+                </Link>
               </Button>
-              <Button variant="outline" size="sm">
-                <Calendar className="w-4 h-4 mr-1" />
-                Schedule Task
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/dashboard/schedule">
+                  <Calendar className="w-4 h-4 mr-1" />
+                  Schedule Task
+                </Link>
               </Button>
             </div>
           </div>

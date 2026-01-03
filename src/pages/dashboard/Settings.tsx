@@ -1,22 +1,107 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   User,
   Bell,
   Shield,
-  Palette,
   Mail,
   Smartphone,
   Globe,
   Key,
   Trash2,
+  Loader2,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Settings() {
+  const { profile, updateProfile, signOut } = useAuth();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    first_name: profile?.first_name || "",
+    last_name: profile?.last_name || "",
+    email: profile?.email || "",
+    phone: profile?.phone || "",
+  });
+  const [notifications, setNotifications] = useState({
+    email: profile?.notification_email ?? true,
+    push: profile?.notification_push ?? true,
+    medication_reminders: profile?.notification_medication_reminders ?? true,
+    community_updates: profile?.notification_community_updates ?? false,
+  });
+
+  const handleSaveProfile = async () => {
+    setIsLoading(true);
+    const { error } = await updateProfile({
+      first_name: formData.first_name,
+      last_name: formData.last_name,
+      phone: formData.phone || null,
+    });
+    setIsLoading(false);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Profile updated",
+      description: "Your changes have been saved.",
+    });
+  };
+
+  const handleSaveNotifications = async () => {
+    setIsLoading(true);
+    const { error } = await updateProfile({
+      notification_email: notifications.email,
+      notification_push: notifications.push,
+      notification_medication_reminders: notifications.medication_reminders,
+      notification_community_updates: notifications.community_updates,
+    });
+    setIsLoading(false);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Notifications updated",
+      description: "Your notification preferences have been saved.",
+    });
+  };
+
+  if (!profile) {
+    return (
+      <div className="space-y-6 animate-fade-up max-w-4xl">
+        <Card variant="elevated">
+          <CardContent className="p-6">
+            <Skeleton className="h-20 w-20 rounded-full mb-4" />
+            <Skeleton className="h-10 w-full mb-4" />
+            <Skeleton className="h-10 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const initials = `${profile.first_name?.[0] || ""}${profile.last_name?.[0] || ""}`.toUpperCase();
+
   return (
     <div className="space-y-6 animate-fade-up max-w-4xl">
       {/* Profile Settings */}
@@ -35,7 +120,7 @@ export default function Settings() {
         <CardContent className="space-y-6">
           <div className="flex items-center gap-6">
             <div className="w-20 h-20 rounded-full gradient-hero flex items-center justify-center text-2xl font-bold text-primary-foreground">
-              JD
+              {initials}
             </div>
             <div>
               <Button variant="outline" size="sm">
@@ -50,23 +135,52 @@ export default function Settings() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="firstName">First Name</Label>
-              <Input id="firstName" defaultValue="John" />
+              <Input
+                id="firstName"
+                value={formData.first_name}
+                onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="lastName">Last Name</Label>
-              <Input id="lastName" defaultValue="Doe" />
+              <Input
+                id="lastName"
+                value={formData.last_name}
+                onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" defaultValue="john@example.com" />
+              <Input
+                id="email"
+                type="email"
+                value={formData.email}
+                disabled
+                className="bg-muted"
+              />
+              <p className="text-xs text-muted-foreground">Email cannot be changed</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" defaultValue="(555) 123-4567" />
+              <Input
+                id="phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="(555) 123-4567"
+              />
             </div>
           </div>
 
-          <Button variant="default">Save Changes</Button>
+          <Button variant="default" onClick={handleSaveProfile} disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Changes"
+            )}
+          </Button>
         </CardContent>
       </Card>
 
@@ -93,7 +207,10 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">Receive updates via email</p>
                 </div>
               </div>
-              <Switch defaultChecked />
+              <Switch
+                checked={notifications.email}
+                onCheckedChange={(checked) => setNotifications({ ...notifications, email: checked })}
+              />
             </div>
 
             <Separator />
@@ -106,7 +223,10 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">Get instant mobile alerts</p>
                 </div>
               </div>
-              <Switch defaultChecked />
+              <Switch
+                checked={notifications.push}
+                onCheckedChange={(checked) => setNotifications({ ...notifications, push: checked })}
+              />
             </div>
 
             <Separator />
@@ -119,7 +239,10 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">Alerts for scheduled medications</p>
                 </div>
               </div>
-              <Switch defaultChecked />
+              <Switch
+                checked={notifications.medication_reminders}
+                onCheckedChange={(checked) => setNotifications({ ...notifications, medication_reminders: checked })}
+              />
             </div>
 
             <Separator />
@@ -132,9 +255,23 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">New posts and replies</p>
                 </div>
               </div>
-              <Switch />
+              <Switch
+                checked={notifications.community_updates}
+                onCheckedChange={(checked) => setNotifications({ ...notifications, community_updates: checked })}
+              />
             </div>
           </div>
+
+          <Button variant="outline" onClick={handleSaveNotifications} disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Preferences"
+            )}
+          </Button>
         </CardContent>
       </Card>
 
@@ -158,7 +295,7 @@ export default function Settings() {
                 <Key className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="font-medium text-foreground text-sm">Password</p>
-                  <p className="text-xs text-muted-foreground">Last changed 30 days ago</p>
+                  <p className="text-xs text-muted-foreground">Change your password</p>
                 </div>
               </div>
               <Button variant="outline" size="sm">
@@ -177,7 +314,7 @@ export default function Settings() {
                 </div>
               </div>
               <Button variant="outline" size="sm">
-                Enable
+                {profile.two_factor_enabled ? "Disable" : "Enable"}
               </Button>
             </div>
           </div>

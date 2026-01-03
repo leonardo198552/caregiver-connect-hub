@@ -4,17 +4,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Heart, Eye, EyeOff, ArrowLeft, Building2, Users, Check } from "lucide-react";
+import { Heart, Eye, EyeOff, ArrowLeft, Building2, Users, Check, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { z } from "zod";
 
 type AccountType = "company" | "individual" | null;
+
+const registerSchema = z.object({
+  firstName: z.string().min(1, "First name is required").max(50, "First name is too long"),
+  lastName: z.string().min(1, "Last name is required").max(50, "Last name is too long"),
+  email: z.string().email("Please enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
 
 export default function Register() {
   const [searchParams] = useSearchParams();
   const [accountType, setAccountType] = useState<AccountType>(null);
   const [formData, setFormData] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -22,8 +36,11 @@ export default function Register() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signUp, user, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     const type = searchParams.get("type");
@@ -32,38 +49,69 @@ export default function Register() {
     }
   }, [searchParams]);
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && !authLoading) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, authLoading, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
 
-    if (formData.password !== formData.confirmPassword) {
-      toast({
-        title: "Passwords don't match",
-        description: "Please make sure your passwords match.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Validate input
+    const result = registerSchema.safeParse({
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      email: formData.email,
+      password: formData.password,
+      confirmPassword: formData.confirmPassword,
+    });
 
-    if (formData.password.length < 8) {
-      toast({
-        title: "Password too short",
-        description: "Password must be at least 8 characters.",
-        variant: "destructive",
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      result.error.errors.forEach((err) => {
+        fieldErrors[err.path[0] as string] = err.message;
       });
+      setErrors(fieldErrors);
       return;
     }
 
     setIsLoading(true);
 
-    // Simulate registration - replace with actual auth
-    setTimeout(() => {
-      setIsLoading(false);
-      toast({
-        title: "Account created!",
-        description: "Welcome to CareConnect. Let's get started!",
-      });
-      navigate("/dashboard");
-    }, 1500);
+    const { error } = await signUp(
+      formData.email,
+      formData.password,
+      formData.firstName,
+      formData.lastName
+    );
+
+    setIsLoading(false);
+
+    if (error) {
+      if (error.message.includes("already registered")) {
+        toast({
+          title: "Account exists",
+          description: "An account with this email already exists. Please sign in instead.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Registration failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
+    toast({
+      title: "Account created!",
+      description: "Welcome to CareConnect. Let's get started!",
+    });
+    
+    navigate("/dashboard");
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,7 +119,23 @@ export default function Register() {
       ...prev,
       [e.target.name]: e.target.value,
     }));
+    // Clear error when user types
+    if (errors[e.target.name]) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[e.target.name];
+        return newErrors;
+      });
+    }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!accountType) {
     return (
@@ -223,18 +287,37 @@ export default function Register() {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="name">
-                  {accountType === "company" ? "Administrator Name" : "Full Name"}
-                </Label>
-                <Input
-                  id="name"
-                  name="name"
-                  placeholder="John Doe"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name</Label>
+                  <Input
+                    id="firstName"
+                    name="firstName"
+                    placeholder="John"
+                    value={formData.firstName}
+                    onChange={handleInputChange}
+                    required
+                    className={errors.firstName ? "border-destructive" : ""}
+                  />
+                  {errors.firstName && (
+                    <p className="text-xs text-destructive">{errors.firstName}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input
+                    id="lastName"
+                    name="lastName"
+                    placeholder="Doe"
+                    value={formData.lastName}
+                    onChange={handleInputChange}
+                    required
+                    className={errors.lastName ? "border-destructive" : ""}
+                  />
+                  {errors.lastName && (
+                    <p className="text-xs text-destructive">{errors.lastName}</p>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -247,7 +330,11 @@ export default function Register() {
                   value={formData.email}
                   onChange={handleInputChange}
                   required
+                  className={errors.email ? "border-destructive" : ""}
                 />
+                {errors.email && (
+                  <p className="text-xs text-destructive">{errors.email}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -261,6 +348,7 @@ export default function Register() {
                     value={formData.password}
                     onChange={handleInputChange}
                     required
+                    className={errors.password ? "border-destructive" : ""}
                   />
                   <button
                     type="button"
@@ -274,9 +362,13 @@ export default function Register() {
                     )}
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Must be at least 8 characters
-                </p>
+                {errors.password ? (
+                  <p className="text-xs text-destructive">{errors.password}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Must be at least 8 characters
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -289,7 +381,11 @@ export default function Register() {
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
                   required
+                  className={errors.confirmPassword ? "border-destructive" : ""}
                 />
+                {errors.confirmPassword && (
+                  <p className="text-xs text-destructive">{errors.confirmPassword}</p>
+                )}
               </div>
 
               <div className="pt-2">
@@ -300,7 +396,14 @@ export default function Register() {
                   className="w-full"
                   disabled={isLoading}
                 >
-                  {isLoading ? "Creating account..." : "Create Account"}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating account...
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
                 </Button>
               </div>
 
