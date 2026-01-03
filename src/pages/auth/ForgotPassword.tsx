@@ -4,28 +4,52 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Heart, ArrowLeft, Mail, CheckCircle } from "lucide-react";
+import { Heart, ArrowLeft, Mail, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { z } from "zod";
+
+const emailSchema = z.string().email("Please enter a valid email address");
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState("");
   const { toast } = useToast();
+  const { resetPassword } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+
+    // Validate email
+    const result = emailSchema.safeParse(email);
+    if (!result.success) {
+      setError(result.error.errors[0].message);
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulate password reset - replace with actual implementation
-    setTimeout(() => {
-      setIsLoading(false);
-      setIsSuccess(true);
+    const { error: resetError } = await resetPassword(email);
+
+    setIsLoading(false);
+
+    if (resetError) {
       toast({
-        title: "Email sent!",
-        description: "Check your inbox for the password reset link.",
+        title: "Error",
+        description: resetError.message,
+        variant: "destructive",
       });
-    }, 1500);
+      return;
+    }
+
+    setIsSuccess(true);
+    toast({
+      title: "Email sent!",
+      description: "Check your inbox for the password reset link.",
+    });
   };
 
   if (isSuccess) {
@@ -105,7 +129,11 @@ export default function ForgotPassword() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  className={error ? "border-destructive" : ""}
                 />
+                {error && (
+                  <p className="text-xs text-destructive">{error}</p>
+                )}
               </div>
 
               <Button
@@ -115,7 +143,14 @@ export default function ForgotPassword() {
                 className="w-full"
                 disabled={isLoading}
               >
-                {isLoading ? "Sending..." : "Send Reset Link"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  "Send Reset Link"
+                )}
               </Button>
             </form>
           </CardContent>
